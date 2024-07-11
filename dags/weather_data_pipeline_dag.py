@@ -9,9 +9,9 @@ import os
 
 def fetch_weather_data(city, api_key='5471ce6e8cefd8d140ae2505e58ab941'):
     '''
-    Функция выполняет запрос к API и возвращает ответ в JSON формате.
-    city - выбранный город;
-    api_key - ключ для использования API(рекомендуется не задавать явно).
+    Функция выполняет запрос к API погоды и возвращает ответ в JSON формате.
+    city - выбранный город для получения данных о погоде;
+    api_key - ключ для использования API(НЕ ЗАДАВАТЬ ЯВНО).
     '''
     url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}"
     response = requests.get(url)
@@ -22,9 +22,13 @@ def fetch_weather_data(city, api_key='5471ce6e8cefd8d140ae2505e58ab941'):
 
 
 def download_data(**kwargs):
+    '''
+    Осуществление запроса к API и сохранение данных в tmp/weather_data.json.
+    '''
+    # Город, погодные данные которого хотим узнать через API
     city = "London"
     weather_data = fetch_weather_data(city)
-    
+
     # Определение текущей директории и создание папки tmp
     current_dir = os.getcwd()
     output_dir = os.path.join(current_dir, "tmp")
@@ -35,15 +39,18 @@ def download_data(**kwargs):
     output_path = os.path.join(output_dir, "weather_data.json")
     with open(output_path, "w") as file:
         json.dump(weather_data, file)
-    
+
     # Сохранение пути к файлу в xcom
     kwargs['ti'].xcom_push(key='output_path', value=output_path)
 
 
 def process_data(**kwargs):
+    '''
+    Преобразование данных и создание файла processed_weather_data.csv.
+    '''
     # Получение пути к файлу с данными из предыдущей задачи
     output_path = kwargs['ti'].xcom_pull(key='output_path')
-    
+
     # Загрузка данных из локального файла weather_data.json
     with open(output_path, "r") as file:
         weather_data = json.load(file)
@@ -73,6 +80,9 @@ def process_data(**kwargs):
 
 
 def save_data(**kwargs):
+    '''
+    Запись и сохранение данных в файл weather.parquet.
+    '''
     # Получение пути к обработанному файлу processed_weather_data.csv из предыдущей задачи
     processed_output_path = kwargs['ti'].xcom_pull(key='processed_output_path')
     processed_df = pd.read_csv(processed_output_path)
@@ -81,10 +91,11 @@ def save_data(**kwargs):
     parquet_output_path = os.path.join(os.getcwd(), "weather.parquet")
     if os.path.exists(parquet_output_path):
         existing_df = pd.read_parquet(parquet_output_path)
-        processed_df = pd.concat([existing_df, processed_df], ignore_index=True)
+    processed_df = pd.concat([existing_df, processed_df], ignore_index=True)
     processed_df.to_parquet(parquet_output_path, index=False)
 
 
+# start_date необходимо назначить самостоятельно
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
@@ -99,7 +110,7 @@ dag = DAG(
     'weather_data_pipeline_dag',
     default_args=default_args,
     description='A simple weather data pipeline DAG',
-    schedule_interval=timedelta(minutes=1),
+    schedule_interval=timedelta(days=1),
 )
 
 download_data_task = PythonOperator(
